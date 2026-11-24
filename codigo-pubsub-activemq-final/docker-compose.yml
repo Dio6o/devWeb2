@@ -1,0 +1,20 @@
+services:
+  activemq:
+    image: apache/activemq-classic:6.1.2
+    container_name: activemq
+    ports:
+      - "8161:8161"
+      - "5672:5672"
+    volumes:
+      - activemq-data:/opt/apache-activemq/data
+  cliente:
+    build: .
+    profiles: ["cliente"]
+    depends_on:
+      - activemq
+    volumes:
+      - .:/app
+    environment:
+      AMQP_URL: amqp://activemq:5672
+volumes:
+  activemq-data:

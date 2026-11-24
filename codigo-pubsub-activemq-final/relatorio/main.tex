@@ -1,0 +1,260 @@
+\documentclass[12pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{mathptmx}
+\usepackage[top=3cm,left=3cm,bottom=2cm,right=2cm]{geometry}
+\usepackage{setspace}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage[hidelinks]{hyperref}
+
+\renewcommand{\contentsname}{Sumário}
+\renewcommand{\figurename}{Figura}
+\renewcommand{\tablename}{Tabela}
+\renewcommand{\refname}{Referências}
+\renewcommand{\abstractname}{Resumo}
+\renewcommand{\lstlistingname}{Código}
+\renewcommand{\listfigurename}{Lista de Figuras}
+
+\onehalfspacing
+\setlength{\parindent}{1.25cm}
+\setlength{\parskip}{0pt}
+\titleformat{\section}{\normalfont\bfseries\MakeUppercase}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalfont\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\normalfont\itshape}{\thesubsubsection}{1em}{}
+\captionsetup{font=small,labelsep=endash,justification=centering}
+
+\lstdefinestyle{codigo}{basicstyle=\ttfamily\footnotesize,numbers=left,numberstyle=\tiny\color{gray},numbersep=6pt,frame=single,breaklines=true,showstringspaces=false,keywordstyle=\color{blue!60!black},stringstyle=\color{green!40!black},tabsize=4,xleftmargin=1.5em,framexleftmargin=1.5em}
+\lstset{style=codigo}
+
+\newcommand{\printtela}[3][\textwidth]{%
+\IfFileExists{figuras/#2.png}{\begin{figure}[H]\centering
+\includegraphics[width=#1]{figuras/#2.png}
+\caption{#3}\label{fig:#2}
+\end{figure}}{}}
+
+\newcommand{\disciplina}{DESENVOLVIMENTO WEB II}
+\newcommand{\professor}{WESLEY DOS REIS BEZERRA}
+\newcommand{\repositorio}{https://github.com/USUARIO/pubsub-activemq}
+
+\begin{document}
+
+\begin{titlepage}
+\centering
+\textbf{INSTITUTO FEDERAL CATARINENSE\\CAMPUS RIO DO SUL\\BACHARELADO EM CIÊNCIA DA COMPUTAÇÃO}\\[1.5cm]
+\textbf{\disciplina}\\[0.5cm]
+\textbf{\professor}\\[4cm]
+\textbf{DIOGO LOHN MACHADO}\\[3cm]
+{\Large\textbf{LABORATÓRIO DE PUBLISH/SUBSCRIBE COM APACHE ACTIVEMQ E PROTOCOLO AMQP}}\\[3cm]
+\vfill
+Rio do Sul\\\the\year
+\end{titlepage}
+
+
+
+
+
+\section{Introdução}
+
+Sistemas distribuídos modernos dependem de mecanismos de comunicação que permitam a componentes independentes trocarem informações sem acoplamento rígido. A mensageria assíncrona, realizada por meio de \textit{brokers}, atende a essa necessidade ao introduzir um intermediário responsável por receber, armazenar e entregar mensagens \cite{snyder2011}.
+
+O objetivo deste trabalho é implementar um laboratório prático de \textit{publish/subscribe} com o Apache ActiveMQ, utilizando o protocolo AMQP, e explorar as opções de envio de mensagens, em especial a distribuição \textit{fan-out}, a persistência e as assinaturas duráveis. O código-fonte completo está disponível em \url{\repositorio}.
+
+O documento está organizado da seguinte forma: a Seção~2 apresenta o referencial teórico; a Seção~3 descreve o ambiente e a implementação; a Seção~4 apresenta os experimentos e seus resultados; a Seção~5 discute os resultados; e a Seção~6 conclui o trabalho.
+
+\section{Referencial teórico}
+
+\subsection{Middleware orientado a mensagens}
+
+Um \textit{middleware} orientado a mensagens (MOM) é uma camada de infraestrutura que permite a aplicações distribuídas se comunicarem por troca de mensagens por meio de um intermediário, o \textit{broker}. O produtor entrega a mensagem ao \textit{broker} e prossegue sua execução, enquanto o consumidor a recebe quando estiver apto, o que caracteriza a comunicação assíncrona \cite{snyder2011}.
+
+\subsection{O paradigma publish/subscribe}
+
+No paradigma \textit{publish/subscribe}, publicadores produzem eventos sem conhecer os destinatários, e assinantes manifestam interesse em eventos sem conhecer os produtores. Eugster et al. \cite{eugster2003} identificam três dimensões de desacoplamento proporcionadas por esse paradigma:
+
+\begin{itemize}[nosep]
+\item \textbf{espaço}: as partes não precisam se conhecer;
+\item \textbf{tempo}: as partes não precisam estar ativas simultaneamente;
+\item \textbf{sincronização}: o envio e o recebimento não bloqueiam o fluxo de execução dos participantes.
+\end{itemize}
+
+A seleção dos eventos de interesse pode ocorrer por tópico (\textit{topic-based}), por conteúdo (\textit{content-based}) ou por tipo \cite{eugster2003}. Neste trabalho utiliza-se a abordagem por tópico, em que o endereço de destino identifica o canal lógico.
+
+\subsection{Modelos de destino: tópico e fila}
+
+Os \textit{brokers} oferecem, em geral, dois modelos de destino. No modelo de \textbf{tópico}, cada mensagem publicada é replicada para todos os assinantes ativos, comportamento conhecido como \textit{fan-out}. No modelo de \textbf{fila}, cada mensagem é entregue a exatamente um consumidor, ainda que existam vários conectados, o que caracteriza o padrão de consumidores concorrentes (\textit{competing consumers}), útil para distribuição de carga \cite{snyder2011}.
+
+\subsection{Protocolo AMQP 1.0}
+
+O \textit{Advanced Message Queuing Protocol} (AMQP) é um protocolo aberto de camada de aplicação para mensageria, concebido para garantir interoperabilidade entre implementações de diferentes fornecedores \cite{vinoski2006}. A versão 1.0, padronizada pela OASIS \cite{oasis2012}, define apenas o protocolo de transporte e o modelo de mensagem, sem prescrever a topologia interna do \textit{broker}. Seus principais conceitos são:
+
+\begin{itemize}[nosep]
+\item \textbf{conexão}, \textbf{sessão} e \textbf{link}: a conexão é o canal de transporte; a sessão multiplexa fluxos; o \textit{link} é um caminho unidirecional entre um remetente (\textit{sender}) e um destinatário (\textit{receiver});
+\item \textbf{nó}: entidade endereçável, como fila ou tópico, identificada pelo endereço do \textit{link};
+\item \textbf{crédito}: o receptor informa quantas mensagens deseja receber, controlando o fluxo;
+\item \textbf{liquidação} (\textit{settlement}): o receptor sinaliza o resultado do tratamento (aceita, rejeita, libera ou modifica) e o remetente é informado;
+\item \textbf{durabilidade}: tanto a mensagem (campo \textit{durable} do cabeçalho) quanto o terminal de origem do \textit{link} (\textit{durable} e \textit{expiry-policy}) podem ser marcados como duráveis.
+\end{itemize}
+
+\subsection{Apache ActiveMQ}
+
+O Apache ActiveMQ é um \textit{broker} de mensagens de código aberto escrito em Java, que suporta diversos protocolos, entre eles AMQP, MQTT, STOMP e OpenWire \cite{activemq}. No ActiveMQ Classic, o conector AMQP escuta por padrão na porta 5672, e os destinos são endereçados com os prefixos \texttt{topic://} e \texttt{queue://}. A interface web de administração, na porta 8161, permite inspecionar destinos, consumidores e contadores de mensagens enfileiradas e entregues.
+
+\subsection{Persistência e assinaturas duráveis}
+
+O ActiveMQ distingue mensagens persistentes de não persistentes. Mensagens persistentes são gravadas em um armazenamento em disco (por padrão, o KahaDB) antes da confirmação ao produtor e sobrevivem à reinicialização do \textit{broker}; as não persistentes ficam em memória e podem ser perdidas \cite{snyder2011}. Em AMQP, a persistência é solicitada pelo campo \textit{durable} do cabeçalho da mensagem \cite{oasis2012}.
+
+Em um tópico comum, um assinante desconectado deixa de receber mensagens, que são descartadas na ausência de assinantes. Uma \textbf{assinatura durável} faz o \textit{broker} reter as mensagens destinadas ao assinante enquanto ele estiver offline, entregando-as na reconexão. Para isso o assinante deve ser identificado de forma estável, combinando o identificador do contêiner AMQP e o nome do \textit{link} \cite{snyder2011,activemq}.
+
+\subsection{Controle de fluxo: prefetch}
+
+O número de mensagens que o \textit{broker} envia antecipadamente a um consumidor é limitado pelo crédito do \textit{link}, em AMQP, ou \textit{prefetch}, na terminologia do ActiveMQ. Com um valor elevado, um único consumidor pode acumular várias mensagens de uma fila, prejudicando a distribuição entre consumidores. Neste laboratório utiliza-se \textit{prefetch} igual a 1.
+
+\section{Ambiente e implementação}
+
+\subsection{Ambiente}
+
+\begin{itemize}[nosep]
+\item Apache ActiveMQ Classic 6.1.2 em contêiner Docker (imagem \texttt{apache/activemq-classic});
+\item protocolo AMQP 1.0, porta 5672; console web na porta 8161;
+\item Python 3.12 com a biblioteca \texttt{python-qpid-proton}, cliente AMQP 1.0 do projeto Apache Qpid, executado em um segundo contêiner (serviço \texttt{cliente} do Compose, construído a partir do \texttt{Dockerfile}), que acessa o \textit{broker} pelo endereço \texttt{amqp://activemq:5672}.
+\end{itemize}
+
+O \textit{broker} é iniciado com \texttt{docker compose up -d} e o cliente é construído com \texttt{docker compose build cliente}, conforme o Código~\ref{lst:compose}. Um volume nomeado preserva o diretório de dados do KahaDB entre reinicializações do contêiner.
+
+\lstinputlisting[caption={Arquivo docker-compose.yml.},label={lst:compose}]{../docker-compose.yml}
+
+\printtela{docker-up}{Execução do \textit{broker} ActiveMQ via Docker Compose.}
+
+\printtela[0.4\textwidth]{console-inicial}{Contêineres do ambiente listados no Docker Desktop.}
+
+\subsection{Programa publicador}
+
+O publicador (Código~\ref{lst:pub}) abre um \textit{link} de envio para o destino informado e publica cinco mensagens. A próxima mensagem só é agendada após a confirmação (\texttt{on\_accepted}) da anterior, com intervalo configurável, cujo padrão é 60 segundos. A opção \texttt{-{}-persistent} marca o cabeçalho \textit{durable} da mensagem, e \texttt{-{}-ttl} define seu tempo de vida.
+
+\lstinputlisting[language=Python,caption={Programa publicador (publisher.py).},label={lst:pub}]{../publisher.py}
+
+\subsection{Programa assinante}
+
+O assinante (Código~\ref{lst:sub}) recebe um número de mensagens (padrão 1), imprime cada uma com o horário e encerra a conexão. O \textit{prefetch} é 1. Com \texttt{-{}-durable}, o \textit{link} é criado com origem durável e política de expiração \textit{never}, e o nome da instância é usado como identificador do contêiner AMQP, tornando a assinatura reconhecível em reconexões.
+
+\lstinputlisting[language=Python,caption={Programa assinante (subscriber.py).},label={lst:sub}]{../subscriber.py}
+
+\subsection{Execução das cinco instâncias}
+
+O \textit{script} \texttt{demo.sh} (Código~\ref{lst:demo}), executado dentro do contêiner \texttt{cliente}, inicia cinco instâncias do assinante em segundo plano, aguarda três segundos para que todas estejam conectadas e então executa o publicador. As opções adicionais são repassadas pelas variáveis \texttt{SUB\_OPTS} e \texttt{PUB\_OPTS}.
+
+\lstinputlisting[language=bash,caption={Script de demonstração (demo.sh).},label={lst:demo}]{../demo.sh}
+
+\section{Experimentos e resultados}
+
+\subsection{Experimento 1: tópico não durável (\textit{fan-out})}
+
+Comando executado:
+
+\begin{lstlisting}[language=bash]
+docker compose run --rm cliente sh demo.sh topic://eventos
+\end{lstlisting}
+
+As cinco instâncias assinam o tópico \texttt{eventos} e o publicador envia as cinco mensagens com intervalo de um minuto. Como o tópico replica cada mensagem para todos os assinantes ativos, espera-se que as cinco instâncias recebam a mesma mensagem, a de número 1, e então encerrem. As mensagens 2 a 5 são publicadas sem assinantes ativos e, por não haver assinatura durável, são descartadas.
+
+\printtela{exp1-terminal}{Experimento 1: saída do publicador e das cinco instâncias assinantes.}
+
+\printtela{exp1-console}{Experimento 1: console do ActiveMQ exibindo o tópico \texttt{eventos} e seus contadores.}
+
+\subsection{Experimento 2: fila (consumidores concorrentes)}
+
+Comando executado:
+
+\begin{lstlisting}[language=bash]
+docker compose run --rm cliente sh demo.sh queue://fila
+\end{lstlisting}
+
+Na fila, cada mensagem é entregue a um único consumidor. Como cada instância consome uma mensagem e encerra, e o \textit{prefetch} é 1, espera-se que as cinco instâncias recebam mensagens distintas, de 1 a 5, uma por instância, ao longo dos cinco minutos de execução.
+
+\printtela{exp2-terminal}{Experimento 2: cada instância recebe uma mensagem distinta da fila.}
+
+\printtela{exp2-console}{Experimento 2: console do ActiveMQ exibindo a fila \texttt{fila}, com mensagens enfileiradas e consumidas.}
+
+\subsection{Experimento 3: assinatura durável em tópico}
+
+Primeira execução, com assinantes duráveis e mensagens persistentes:
+
+\begin{lstlisting}[language=bash]
+docker compose run --rm -e SUB_OPTS="--durable" -e PUB_OPTS="--persistent" cliente sh demo.sh topic://eventos
+\end{lstlisting}
+
+Cada instância recebe a mensagem 1 e se desconecta. Como as assinaturas são duráveis, o \textit{broker} as mantém como assinaturas offline e retém as mensagens 2 a 5 para cada uma. Em seguida, as instâncias são executadas novamente para consumir as mensagens retidas:
+
+\begin{lstlisting}[language=bash]
+docker compose run --rm cliente sh -c 'for i in 1 2 3 4 5; do python subscriber.py topic://eventos --nome sub$i --durable --total 4 & done; wait'
+\end{lstlisting}
+
+Espera-se que cada instância receba as mensagens 2, 3, 4 e 5, evidenciando o desacoplamento no tempo descrito por Eugster et al. \cite{eugster2003}.
+
+\printtela{exp3-offline}{Experimento 3: execução com assinantes duráveis e mensagens persistentes.}
+
+\printtela{exp3-terminal}{Experimento 3: reconexão das instâncias e recebimento das mensagens retidas.}
+
+\subsection{Experimento 4: persistência frente à reinicialização do \textit{broker}}
+
+Publicação em fila sem consumidores, com mensagens persistentes, seguida de reinicialização do contêiner:
+
+\begin{lstlisting}[language=bash]
+docker compose run --rm cliente python publisher.py queue://persistente --persistent --intervalo 1
+docker compose run --rm cliente python publisher.py queue://volatil --intervalo 1
+docker restart activemq
+docker compose run --rm cliente python subscriber.py queue://persistente --nome leitor --total 5
+docker compose run --rm cliente python subscriber.py queue://volatil --nome leitor2 --total 1
+\end{lstlisting}
+
+A fila \texttt{queue://volatil} recebe mensagens sem a opção \texttt{-{}-persistent}, para comparação. Espera-se que as cinco mensagens persistentes sobrevivam à reinicialização, ao passo que as não persistentes sejam perdidas, de acordo com o comportamento do armazenamento descrito em \cite{snyder2011}.
+
+\printtela{exp4-antes}{Experimento 4: filas com mensagens pendentes antes da reinicialização.}
+
+\printtela{exp4-depois}{Experimento 4: estado das filas após \texttt{docker restart activemq}.}
+
+\printtela{exp4-leitura}{Experimento 4: leitura das mensagens persistentes após a reinicialização.}
+
+\section{Discussão}
+
+A Tabela~\ref{tab:comp} resume o comportamento esperado de cada configuração explorada.
+
+\begin{table}[H]
+\centering\small
+\caption{Comparação das opções de envio exploradas.}\label{tab:comp}
+\begin{tabular}{p{3.2cm}p{3.2cm}p{3.2cm}p{3.6cm}}
+\toprule
+Configuração & Destino & Entrega & Assinante offline / reinício do \textit{broker}\\
+\midrule
+Tópico comum & \texttt{topic://} & Todos os assinantes ativos (\textit{fan-out}) & Mensagens perdidas para quem está offline\\
+Fila & \texttt{queue://} & Um consumidor por mensagem & Mensagens retidas na fila\\
+Tópico com assinatura durável & \texttt{topic://} + durável & \textit{Fan-out} com retenção por assinante & Mensagens retidas até a reconexão\\
+Mensagem persistente & \textit{durable}=true & Igual ao destino & Sobrevive ao reinício\\
+Mensagem não persistente & \textit{durable}=false & Igual ao destino & Pode ser perdida no reinício\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A escolha entre tópico e fila depende da semântica desejada: o tópico atende à difusão de eventos a múltiplos interessados, enquanto a fila atende à distribuição de tarefas. A persistência e a assinatura durável acrescentam garantia de entrega ao custo de gravação em disco e de retenção de estado no \textit{broker}, o que representa um compromisso entre confiabilidade e desempenho \cite{snyder2011}.
+
+\section{Conclusão}
+
+O laboratório permitiu observar na prática os principais conceitos do paradigma \textit{publish/subscribe}: o desacoplamento entre publicadores e assinantes, a diferença de semântica entre tópicos e filas, o papel das assinaturas duráveis na retenção de mensagens para assinantes offline e a influência da persistência na tolerância a falhas do \textit{broker}. O uso do AMQP 1.0 mostrou que essas funcionalidades são expressas por meio de atributos padronizados do protocolo, como o campo \textit{durable} da mensagem e a política de expiração do terminal de origem, o que favorece a interoperabilidade entre clientes e \textit{brokers}.
+
+\begin{thebibliography}{9}
+\setlength{\itemsep}{12pt}
+\bibitem{eugster2003} EUGSTER, P. T.; FELBER, P. A.; GUERRAOUI, R.; KERMARREC, A.-M. The many faces of publish/subscribe. \textbf{ACM Computing Surveys}, v. 35, n. 2, p. 114--131, 2003.
+\bibitem{vinoski2006} VINOSKI, S. Advanced Message Queuing Protocol. \textbf{IEEE Internet Computing}, v. 10, n. 6, p. 87--89, 2006.
+\bibitem{oasis2012} OASIS. \textbf{OASIS Advanced Message Queuing Protocol (AMQP) Version 1.0}. OASIS Standard, 2012. Disponível em: \url{https://docs.oasis-open.org/amqp/core/v1.0/amqp-core-complete-v1.0.pdf}.
+\bibitem{snyder2011} SNYDER, B.; BOSANAC, D.; DAVIES, R. \textbf{ActiveMQ in Action}. Shelter Island: Manning, 2011.
+\bibitem{activemq} THE APACHE SOFTWARE FOUNDATION. \textbf{Apache ActiveMQ Classic Documentation}. Disponível em: \url{https://activemq.apache.org/components/classic/documentation}.
+\end{thebibliography}
+
+\end{document}
